@@ -1,0 +1,20 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+  width: 380px;
+  min-height: 200px;
+}
+button {
+  cursor: pointer;
+  font: inherit;
+}
+input,
+textarea,
+select {
+  font: inherit;
+}
