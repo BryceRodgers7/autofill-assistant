@@ -15,7 +15,6 @@ export type MessageFromExtension =
       includeLowerConfidence: boolean
     }
   | { type: 'CLEAR_HIGHLIGHTS'; tabId?: number }
-  | { type: 'OPEN_SIDE_PANEL' }
   | { type: 'GET_LAST_SCAN'; tabId?: number }
 
 export type MessageResponse =
@@ -24,7 +23,6 @@ export type MessageResponse =
   | { ok: true; scan: ScanResult }
   | { ok: true; fill: FillOperationResult }
   | { ok: true; cleared: true }
-  | { ok: true; sidePanelOpened: true }
   | { ok: true; lastScan: ScanResult | null }
   | { ok: false; error: string }
 

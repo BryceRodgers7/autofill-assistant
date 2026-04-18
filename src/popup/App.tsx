@@ -79,9 +79,14 @@ export function App(): React.ReactElement {
     setStatus(`Scan: ${r.scan.fields.length} field(s). Open side panel to review.`)
   }
 
-  const openSide = async () => {
-    const r = await sendExtensionMessage({ type: 'OPEN_SIDE_PANEL' })
-    if (!r.ok) setStatus(r.error)
+  /**
+   * Must run synchronously from the click handler. Routing through the
+   * service worker loses the user-gesture context and `sidePanel.open()` throws.
+   */
+  const openSide = () => {
+    chrome.sidePanel
+      .open({ windowId: chrome.windows.WINDOW_ID_CURRENT })
+      .catch((e) => setStatus(e instanceof Error ? e.message : String(e)))
   }
 
   if (!profile || !settings) {
@@ -95,7 +100,7 @@ export function App(): React.ReactElement {
         <button type="button" onClick={() => void scan()}>
           Scan current tab
         </button>
-        <button type="button" onClick={() => void openSide()}>
+        <button type="button" onClick={openSide}>
           Open side panel
         </button>
       </div>

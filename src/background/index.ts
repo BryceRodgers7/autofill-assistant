@@ -57,14 +57,6 @@ chrome.runtime.onMessage.addListener(
           return
         }
 
-        if (request.type === 'OPEN_SIDE_PANEL') {
-          const winId = sender.tab?.windowId ?? (await chrome.windows.getCurrent()).id
-          if (winId === undefined) throw new Error('No window')
-          await chrome.sidePanel.open({ windowId: winId })
-          sendResponse({ ok: true, sidePanelOpened: true })
-          return
-        }
-
         if (request.type === 'GET_LAST_SCAN') {
           const tabId = await resolveTabId(request.tabId, sender.tab?.id)
           const lastScan = await getLastScanForTab(tabId)
