@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, UserProfile } from '../storage/schema'
 import { sendExtensionMessage } from '../shared/extensionMessaging'
 
@@ -36,6 +36,49 @@ export function App(): React.ReactElement {
   const [workJson, setWorkJson] = useState('[]')
   const [customJson, setCustomJson] = useState('{}')
 
+  const settingsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settingsRef = useRef<AppSettings | null>(null)
+
+  const schedulePersistAppSettings = useCallback((next: AppSettings) => {
+    if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current)
+    settingsSaveTimer.current = setTimeout(() => {
+      settingsSaveTimer.current = null
+      void sendExtensionMessage({ type: 'SAVE_SETTINGS', settings: next }).catch(() => {
+        setStatus('Could not save settings')
+      })
+    }, 350)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (settingsSaveTimer.current) clearTimeout(settingsSaveTimer.current)
+    },
+    [],
+  )
+
+  /** Merges a settings patch, updates UI, and debounce-saves to chrome.storage (so Fill uses the bar value). */
+  const patchAppSettings = useCallback(
+    (patch: Partial<AppSettings>) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const next = { ...prev, ...patch }
+        settingsRef.current = next
+        queueMicrotask(() => schedulePersistAppSettings(next))
+        return next
+      })
+    },
+    [schedulePersistAppSettings],
+  )
+
+  const flushPersistAppSettings = useCallback(() => {
+    if (settingsSaveTimer.current) {
+      clearTimeout(settingsSaveTimer.current)
+      settingsSaveTimer.current = null
+    }
+    const s = settingsRef.current
+    if (s) void sendExtensionMessage({ type: 'SAVE_SETTINGS', settings: s })
+  }, [])
+
   const refresh = useCallback(async () => {
     const r = await sendExtensionMessage({ type: 'GET_STATE' })
     if (!r.ok || !('state' in r)) {
@@ -43,6 +86,7 @@ export function App(): React.ReactElement {
       return
     }
     setProfile(r.state.profile)
+    settingsRef.current = r.state.settings
     setSettings(r.state.settings)
     setEducationJson(JSON.stringify(r.state.profile.education, null, 2))
     setWorkJson(JSON.stringify(r.state.profile.workHistory, null, 2))
@@ -112,6 +156,10 @@ export function App(): React.ReactElement {
 
       <section>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>Settings</div>
+        <p style={{ fontSize: 11, color: '#555', margin: '0 0 6px' }}>
+          Settings here save automatically to storage (debounced) so <strong>Fill</strong> in the side
+          panel uses your bar and toggles without clicking Save below.
+        </p>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           Confidence threshold: {settings.confidenceThreshold.toFixed(2)}
           <input
@@ -121,17 +169,16 @@ export function App(): React.ReactElement {
             step={0.01}
             value={settings.confidenceThreshold}
             onChange={(e) =>
-              setSettings({ ...settings, confidenceThreshold: Number(e.target.value) })
+              patchAppSettings({ confidenceThreshold: Number(e.target.value) })
             }
+            onPointerUp={flushPersistAppSettings}
           />
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <input
             type="checkbox"
             checked={settings.overwriteExisting}
-            onChange={(e) =>
-              setSettings({ ...settings, overwriteExisting: e.target.checked })
-            }
+            onChange={(e) => patchAppSettings({ overwriteExisting: e.target.checked })}
           />
           Overwrite non-empty fields
         </label>
@@ -139,9 +186,7 @@ export function App(): React.ReactElement {
           <input
             type="checkbox"
             checked={settings.highlightFilled}
-            onChange={(e) =>
-              setSettings({ ...settings, highlightFilled: e.target.checked })
-            }
+            onChange={(e) => patchAppSettings({ highlightFilled: e.target.checked })}
           />
           Highlight filled / skipped
         </label>
@@ -149,7 +194,7 @@ export function App(): React.ReactElement {
           <input
             type="checkbox"
             checked={settings.verboseDebug}
-            onChange={(e) => setSettings({ ...settings, verboseDebug: e.target.checked })}
+            onChange={(e) => patchAppSettings({ verboseDebug: e.target.checked })}
           />
           Verbose debug logging
         </label>
@@ -157,11 +202,9 @@ export function App(): React.ReactElement {
           <input
             type="checkbox"
             checked={settings.includeLowerConfidence}
-            onChange={(e) =>
-              setSettings({ ...settings, includeLowerConfidence: e.target.checked })
-            }
+            onChange={(e) => patchAppSettings({ includeLowerConfidence: e.target.checked })}
           />
-          Include lower-confidence matches (default for fill)
+          Include lower-confidence when filling (uses a lower effective threshold; see README)
         </label>
       </section>
 

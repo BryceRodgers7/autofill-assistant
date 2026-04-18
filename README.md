@@ -30,10 +30,11 @@ npm run dev
 
 ## Usage
 
-1. Open your profile in the **extension popup** (toolbar icon). Enter data and adjust the confidence threshold, overwrite, highlight, and debug options. Click **Save**.
-2. On an application page, click **Scan current tab** in the popup (or **Rescan** in the side panel).
-3. Open the **side panel** from the popup to review detected fields, confidence, planned values, and classification reasons.
-4. Use **Dry run** to preview actions without changing the page, then **Fill** when ready. Review everything and **submit manually** on the site.
+1. Open your profile in the **extension popup** (toolbar icon). **Settings** (confidence bar, toggles) are **saved automatically** to storage (debounced) so **Fill** uses them even if you do not click **Save**. Use **Save profile & settings** for profile fields and JSON blocks.
+2. **Confidence bar**: Fill compares each field’s score to this value. **Include lower-confidence when filling** (popup or side panel) uses a lower *effective* cutoff: `max(0.2, storedBar − 0.35)` so borderline fields (e.g. 0.48) can still fill when the stored bar is high (e.g. 0.72 → effective 0.37).
+3. On an application page, click **Scan current tab** in the popup (or **Rescan** in the side panel).
+4. Open the **side panel** from the popup to review detected fields, confidence, planned values, and classification reasons.
+5. Use **Dry run** to preview actions without changing the page, then **Fill** when ready. Review everything and **submit manually** on the site.
 
 ### Education in your profile (JSON)
 

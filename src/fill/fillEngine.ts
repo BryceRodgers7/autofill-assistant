@@ -30,9 +30,17 @@ export interface FillEngineOptions {
   targets: ScannedField[]
 }
 
-function effectiveThreshold(settings: AppSettings, includeLower: boolean): number {
-  if (includeLower) return Math.max(0.35, settings.confidenceThreshold - 0.22)
-  return settings.confidenceThreshold
+/**
+ * Main bar: fill when confidence >= `settings.confidenceThreshold`.
+ * Include-lower: allow clearly borderline fields by using a lower *effective* floor
+ * (subtract a chunk from the stored bar, floor at 0.2). Stored bar still applies when the toggle is off.
+ */
+export function effectiveFillThreshold(
+  settings: AppSettings,
+  includeLower: boolean,
+): number {
+  if (!includeLower) return settings.confidenceThreshold
+  return Math.max(0.2, settings.confidenceThreshold - 0.35)
 }
 
 function findDomForDescriptor(root: Document, d: FieldDescriptor): HTMLElement | null {
@@ -102,7 +110,7 @@ export function runFillOperation(
   root: Document,
   opts: FillEngineOptions,
 ): FieldFillResult[] {
-  const thr = effectiveThreshold(opts.settings, opts.includeLowerConfidence)
+  const thr = effectiveFillThreshold(opts.settings, opts.includeLowerConfidence)
   const results: FieldFillResult[] = []
   const elementMap = buildElementMap(root, opts.targets)
 
@@ -127,10 +135,11 @@ export function runFillOperation(
     }
 
     if (conf < thr) {
+      const mode = opts.includeLowerConfidence ? 'include-lower effective' : 'stored'
       results.push({
         fieldId: d.id,
         status: 'skipped',
-        reason: `below confidence threshold (${conf.toFixed(2)} < ${thr.toFixed(2)})`,
+        reason: `below ${mode} threshold (${conf.toFixed(2)} < ${thr.toFixed(2)}; bar=${opts.settings.confidenceThreshold.toFixed(2)})`,
       })
       continue
     }
