@@ -104,6 +104,7 @@ chrome.runtime.onMessage.addListener(
           const logger = createLogger('scan', () => verbose)
           const out = await sendToTab<ContentOutboundMessage>(tabId, {
             type: 'JAA_SCAN_PAGE',
+            tabId,
             settings,
             profile,
           })
@@ -135,6 +136,7 @@ chrome.runtime.onMessage.addListener(
           const { profile, settings } = await loadState()
           const out = await sendToTab<ContentOutboundMessage>(tabId, {
             type: 'JAA_FILL_PAGE',
+            tabId,
             profile,
             settings,
             dryRun: request.dryRun,

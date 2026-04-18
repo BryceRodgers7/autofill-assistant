@@ -14,7 +14,8 @@ chrome.runtime.onMessage.addListener(
     ;(async () => {
       try {
         if (message.type === 'JAA_SCAN_PAGE') {
-          const tabId = sender.tab?.id
+          // Background uses tabs.sendMessage — Chrome often omits sender.tab here.
+          const tabId = message.tabId ?? sender.tab?.id
           if (tabId === undefined) {
             sendResponse({ ok: false, error: 'No tab id (content script context)' })
             return
@@ -26,7 +27,7 @@ chrome.runtime.onMessage.addListener(
         }
         if (message.type === 'JAA_FILL_PAGE') {
           ensureHighlightStyles(document)
-          const tabId = sender.tab?.id
+          const tabId = message.tabId ?? sender.tab?.id
           if (tabId === undefined) {
             sendResponse({ ok: false, error: 'No tab id' })
             return

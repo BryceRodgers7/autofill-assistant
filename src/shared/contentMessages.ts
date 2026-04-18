@@ -5,11 +5,14 @@ import type { AppSettings } from '../storage/schema'
 export type ContentInboundMessage =
   | {
       type: 'JAA_SCAN_PAGE'
+      /** Set by background — `sender.tab` is often missing when using `tabs.sendMessage`. */
+      tabId: number
       settings: AppSettings
       profile: UserProfile
     }
   | {
       type: 'JAA_FILL_PAGE'
+      tabId: number
       profile: UserProfile
       settings: AppSettings
       dryRun: boolean
