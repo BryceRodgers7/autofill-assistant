@@ -35,6 +35,34 @@ npm run dev
 3. Open the **side panel** from the popup to review detected fields, confidence, planned values, and classification reasons.
 4. Use **Dry run** to preview actions without changing the page, then **Fill** when ready. Review everything and **submit manually** on the site.
 
+### Education in your profile (JSON)
+
+Each entry is one degree. Fields map to Greenhouse-style rows like **School**, **Degree**, **Discipline**, **Start year**, **End year** when you use **Fill** on `*.greenhouse.io` job boards (see below).
+
+```json
+[
+  {
+    "school": "University of Washington",
+    "degree": "Bachelor of Science",
+    "fieldOfStudy": "Computer Science",
+    "startDate": "2016",
+    "endDate": "2020"
+  },
+  {
+    "school": "Stanford University",
+    "degree": "Master of Science",
+    "fieldOfStudy": "Artificial Intelligence",
+    "startDate": "2020-09",
+    "endDate": "2022-06"
+  }
+]
+```
+
+- **`fieldOfStudy`** is your **Discipline** column (schema name is historical).
+- **Years**: any string containing a 4-digit year works (e.g. `2016` or `2020-09`); the first `19xx`/`20xx` match is used for year dropdowns.
+
+The generic classifier may still attach the key `education` to a single control and try to paste **stringified JSON** there. That is only useful for free-text “paste your education” boxes. **Greenhouse’s five dropdowns per row are filled by a separate pass** that reads `profile.education[]`, matches option **labels** to your strings, and clicks **Add another** when you have more degrees than visible rows.
+
 ## Architecture
 
 | Part | Role |
@@ -45,7 +73,7 @@ npm run dev
 | `src/sidepanel` | React review UI: filters, dry run / fill / rescan / clear highlights |
 | `src/fieldDetection` | Visibility, labels, ARIA, context, radios/selects → `FieldDescriptor` |
 | `src/classification` | Synonym dictionary + scoring → canonical `ProfileKey` + confidence |
-| `src/fill` | Value set + `input`/`change` events, conservative checkbox/radio rules, no file auto-fill |
+| `src/fill` | Value set + `input`/`change` events, conservative checkbox/radio rules, no file auto-fill; Greenhouse structured education helper |
 | `src/storage` | Zod schemas + `chrome.storage.local` for profile/settings |
 | `src/shared` | Types, fingerprints, message contracts |
 | `src/debug` | Structured logger gated by verbose setting |
@@ -77,3 +105,4 @@ Unit tests cover the pure classification layer with common ATS-style labels.
 
 - Shadow DOM / cross-origin iframes are not supported
 - Some React-controlled sites may still need synonym tuning; extend `src/classification/synonyms.ts` and add tests
+- **Greenhouse education**: School/Degree/Discipline must appear in the site’s dropdown lists (fuzzy label match). If your school is missing, add it in Greenhouse or pick **Other** and fill manually. Month-only fields (if shown) are not handled in this MVP.

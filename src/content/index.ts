@@ -5,6 +5,10 @@ import {
   applyHighlights,
   clearHighlights,
 } from '../fill/fillEngine'
+import {
+  isGreenhouseJobBoardHost,
+  runGreenhouseEducationFill,
+} from '../fill/greenhouseEducation'
 import { ensureHighlightStyles } from './highlightStyles'
 import { createLogger } from '../debug/logger'
 import { verboseFromSettings } from '../debug/logger'
@@ -38,13 +42,22 @@ chrome.runtime.onMessage.addListener(
             dryRun: message.dryRun,
             targets: message.targets.length,
           })
-          const results = runFillOperation(document, {
+          let results = runFillOperation(document, {
             profile: message.profile,
             settings: message.settings,
             dryRun: message.dryRun,
             includeLowerConfidence: message.includeLowerConfidence,
             targets: message.targets,
           })
+          if (isGreenhouseJobBoardHost(location.hostname) && message.profile.education.length > 0) {
+            const gh = await runGreenhouseEducationFill({
+              doc: document,
+              profile: message.profile,
+              settings: message.settings,
+              dryRun: message.dryRun,
+            })
+            results = [...results, ...gh]
+          }
           if (message.settings.highlightFilled && !message.dryRun) {
             applyHighlights(document, message.targets, results, true)
           }

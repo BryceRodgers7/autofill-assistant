@@ -212,8 +212,12 @@ export function App(): React.ReactElement {
           />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 11 }}>education (JSON)</span>
-          <textarea rows={4} value={educationJson} onChange={(e) => setEducationJson(e.target.value)} />
+          <span style={{ fontSize: 11 }}>
+            education (JSON) — array of{' '}
+            <code>{'{ school, degree, fieldOfStudy, startDate, endDate }'}</code>; on Greenhouse,
+            Fill maps each entry to one row (5 selects).
+          </span>
+          <textarea rows={6} value={educationJson} onChange={(e) => setEducationJson(e.target.value)} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 11 }}>workHistory (JSON)</span>
