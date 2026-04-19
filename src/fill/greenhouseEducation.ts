@@ -22,6 +22,57 @@ function setNativeInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: 
   else el.value = value
 }
 
+/** Normalize option / profile labels for equality checks. */
+function normListLabel(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * React-select (Greenhouse) often ignores a plain `input` Event after a bulk value set.
+ * Use the native value setter plus `InputEvent` so the menu actually filters on the full string.
+ */
+function assignComboboxFilterValue(input: HTMLInputElement, text: string): void {
+  setNativeInputValue(input, text)
+  try {
+    input.dispatchEvent(
+      new InputEvent('input', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: text,
+      }),
+    )
+  } catch {
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+async function typeComboboxValueSlowly(input: HTMLInputElement, text: string): Promise<void> {
+  setNativeInputValue(input, '')
+  assignComboboxFilterValue(input, '')
+  await sleep(40)
+  let acc = ''
+  for (const ch of text) {
+    acc += ch
+    setNativeInputValue(input, acc)
+    try {
+      input.dispatchEvent(
+        new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: ch,
+        }),
+      )
+    } catch {
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await sleep(10)
+  }
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
@@ -166,24 +217,6 @@ function reactSelectListboxId(inputId: string): string {
   return `react-select-${inputId}-listbox`
 }
 
-/**
- * Filter strings to try in react-select (longest first elsewhere).
- * Avoid strict prefixes of the full phrase (e.g. "University of") — they made the
- * input visibly "strip" word-by-word during discovery while adding little value over the full string.
- */
-function buildFilterQueries(desired: string): string[] {
-  const d = desired.trim()
-  const out: string[] = []
-  if (d) out.push(d.slice(0, 120))
-  const words = d.split(/\s+/).filter((w) => w.length > 1)
-  if (words.length >= 1) out.push(words[0]!)
-  if (words.length >= 2) {
-    const longest = [...words].sort((a, b) => b.length - a.length)[0]
-    if (longest && !out.includes(longest)) out.push(longest)
-  }
-  return [...new Set(out.filter(Boolean))]
-}
-
 /** Best option in an open listbox vs full profile string (no score floor). */
 function scanListboxForBest(
   listbox: Element,
@@ -201,9 +234,59 @@ function scanListboxForBest(
   return best
 }
 
-function waitAfterFilterMs(query: string, isLongestQuery: boolean): number {
-  const base = Math.min(1000, 400 + query.length * 16)
-  return isLongestQuery ? Math.max(base, 720) : base
+/**
+ * Wait for react-select to open and options to reflect the current filter (async / debounced).
+ */
+async function pollReactSelectMatch(
+  doc: Document,
+  input: HTMLInputElement,
+  desired: string,
+  timeoutMs: number,
+): Promise<{ chosenLabel: string; score: number } | null> {
+  const want = normListLabel(desired)
+  const deadline = Date.now() + timeoutMs
+  let bestWeak: { chosenLabel: string; score: number } | null = null
+  while (Date.now() < deadline) {
+    const lb = doc.getElementById(reactSelectListboxId(input.id))
+    if (!lb) {
+      input.focus()
+      input.click()
+      await sleep(100)
+      continue
+    }
+    for (const opt of Array.from(lb.querySelectorAll<HTMLElement>('[role="option"]'))) {
+      const lab = (opt.textContent ?? '').trim()
+      if (!lab) continue
+      if (normListLabel(lab) === want) {
+        return { chosenLabel: lab, score: 100 }
+      }
+    }
+    const row = scanListboxForBest(lb, desired)
+    if (row) {
+      if (!bestWeak || row.score > bestWeak.score) {
+        bestWeak = { chosenLabel: row.label, score: row.score }
+      }
+      if (row.score >= 99) {
+        return { chosenLabel: row.label, score: row.score }
+      }
+    }
+    await sleep(90)
+  }
+  return bestWeak && bestWeak.score >= 88 ? bestWeak : null
+}
+
+function findListboxOptionByNormLabel(
+  doc: Document,
+  inputId: string,
+  chosenLabel: string,
+): HTMLElement | null {
+  const lb = doc.getElementById(reactSelectListboxId(inputId))
+  if (!lb) return null
+  const want = normListLabel(chosenLabel)
+  for (const opt of Array.from(lb.querySelectorAll<HTMLElement>('[role="option"]'))) {
+    if (normListLabel(opt.textContent ?? '') === want) return opt
+  }
+  return null
 }
 
 async function fillReactSelectCombobox(
@@ -236,42 +319,29 @@ async function fillReactSelectCombobox(
     }
   }
 
-  const queries = buildFilterQueries(desired)
+  const primary = desired.slice(0, 120)
+
   input.focus()
   input.click()
-  await sleep(80)
+  await sleep(120)
   if (looksLikePastedProfileJson(input.value)) {
-    setNativeInputValue(input, '')
-    dispatchInputEvents(input)
-    await sleep(60)
+    assignComboboxFilterValue(input, '')
+    await sleep(80)
   }
 
-  /** Longest queries first + early exit on exact match → avoids typing shorter prefixes after the full phrase (visible "word stripping"). */
-  const queriesSorted = [...queries].sort((a, b) => b.length - a.length)
-  const longestLen = queriesSorted[0]?.length ?? 0
+  assignComboboxFilterValue(input, primary)
 
-  let best: { score: number; chosenLabel: string; query: string } | null = null
-  for (const q of queriesSorted) {
-    setNativeInputValue(input, q)
-    dispatchInputEvents(input)
-    await sleep(waitAfterFilterMs(q, q.length === longestLen))
-    const lb = doc.getElementById(reactSelectListboxId(input.id))
-    if (!lb) continue
-    const row = scanListboxForBest(lb, desired)
-    if (!row) continue
-    if (
-      !best ||
-      row.score > best.score ||
-      (row.score === best.score && q.length > best.query.length)
-    ) {
-      best = { score: row.score, chosenLabel: row.label, query: q }
-    }
-    const exact =
-      row.label.trim().toLowerCase() === desired.toLowerCase() || row.score >= 99
-    if (exact) break
+  let match = await pollReactSelectMatch(doc, input, desired, 4500)
+  const strongEnough = (m: { chosenLabel: string; score: number } | null) =>
+    m !== null &&
+    (m.score >= 97 || normListLabel(m.chosenLabel) === normListLabel(desired))
+
+  if (!strongEnough(match)) {
+    await typeComboboxValueSlowly(input, primary)
+    match = await pollReactSelectMatch(doc, input, desired, 5000)
   }
 
-  if (!best || best.score < 30) {
+  if (!match || match.score < 30) {
     return {
       fieldId,
       status: 'skipped',
@@ -279,35 +349,23 @@ async function fillReactSelectCombobox(
     }
   }
 
-  setNativeInputValue(input, best.query)
-  dispatchInputEvents(input)
-  await sleep(waitAfterFilterMs(best.query, best.query.length === longestLen))
-  const lbFinal = doc.getElementById(reactSelectListboxId(input.id))
-  if (!lbFinal) {
-    return {
-      fieldId,
-      status: 'error',
-      reason: `react-select menu missing for ${label} after filter`,
-    }
-  }
-
-  let toClick: HTMLElement | null = null
-  for (const opt of Array.from(lbFinal.querySelectorAll<HTMLElement>('[role="option"]'))) {
-    const lab = (opt.textContent ?? '').trim()
-    if (lab === best.chosenLabel) {
-      toClick = opt
-      break
-    }
+  assignComboboxFilterValue(input, primary)
+  await sleep(320)
+  let toClick = findListboxOptionByNormLabel(doc, input.id, match.chosenLabel)
+  if (!toClick) {
+    await sleep(400)
+    toClick = findListboxOptionByNormLabel(doc, input.id, match.chosenLabel)
   }
   if (!toClick) {
-    const again = scanListboxForBest(lbFinal, desired)
-    if (again && again.score >= 30) toClick = again.el
+    const lb = doc.getElementById(reactSelectListboxId(input.id))
+    const row = lb ? scanListboxForBest(lb, desired) : null
+    if (row && row.score >= 30) toClick = row.el
   }
   if (!toClick) {
     return {
       fieldId,
       status: 'error',
-      reason: `could not re-select "${best.chosenLabel}" for ${label}`,
+      reason: `could not click listbox row for "${match.chosenLabel}" (${label})`,
     }
   }
 
@@ -316,7 +374,7 @@ async function fillReactSelectCombobox(
   return {
     fieldId,
     status: 'filled',
-    reason: `Greenhouse ${label} (react-select): ${best.chosenLabel}`,
+    reason: `Greenhouse ${label} (react-select): ${match.chosenLabel}`,
   }
 }
 
