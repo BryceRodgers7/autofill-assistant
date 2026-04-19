@@ -166,12 +166,16 @@ function reactSelectListboxId(inputId: string): string {
   return `react-select-${inputId}-listbox`
 }
 
+/**
+ * Filter strings to try in react-select (longest first elsewhere).
+ * Avoid strict prefixes of the full phrase (e.g. "University of") — they made the
+ * input visibly "strip" word-by-word during discovery while adding little value over the full string.
+ */
 function buildFilterQueries(desired: string): string[] {
   const d = desired.trim()
   const out: string[] = []
-  if (d) out.push(d.slice(0, 72))
+  if (d) out.push(d.slice(0, 120))
   const words = d.split(/\s+/).filter((w) => w.length > 1)
-  if (words.length >= 2) out.push(words.slice(0, 2).join(' '))
   if (words.length >= 1) out.push(words[0]!)
   if (words.length >= 2) {
     const longest = [...words].sort((a, b) => b.length - a.length)[0]
@@ -180,18 +184,26 @@ function buildFilterQueries(desired: string): string[] {
   return [...new Set(out.filter(Boolean))]
 }
 
-function bestListboxOption(
+/** Best option in an open listbox vs full profile string (no score floor). */
+function scanListboxForBest(
   listbox: Element,
   desired: string,
-): { el: HTMLElement; label: string } | null {
+): { el: HTMLElement; label: string; score: number } | null {
+  const opts = Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'))
+  if (opts.length === 0) return null
   let best: { el: HTMLElement; label: string; score: number } | null = null
-  for (const opt of Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'))) {
-    const label = (opt.textContent ?? '').trim()
-    if (!label) continue
-    const score = scoreDesiredAgainstLabel(desired, label)
-    if (!best || score > best.score) best = { el: opt, label, score }
+  for (const opt of opts) {
+    const lab = (opt.textContent ?? '').trim()
+    if (!lab) continue
+    const score = scoreDesiredAgainstLabel(desired, lab)
+    if (!best || score > best.score) best = { el: opt, label: lab, score }
   }
-  return best && best.score >= 30 ? { el: best.el, label: best.label } : null
+  return best
+}
+
+function waitAfterFilterMs(query: string, isLongestQuery: boolean): number {
+  const base = Math.min(1000, 400 + query.length * 16)
+  return isLongestQuery ? Math.max(base, 720) : base
 }
 
 async function fillReactSelectCombobox(
@@ -234,28 +246,77 @@ async function fillReactSelectCombobox(
     await sleep(60)
   }
 
-  for (const q of queries) {
+  /** Longest queries first + early exit on exact match → avoids typing shorter prefixes after the full phrase (visible "word stripping"). */
+  const queriesSorted = [...queries].sort((a, b) => b.length - a.length)
+  const longestLen = queriesSorted[0]?.length ?? 0
+
+  let best: { score: number; chosenLabel: string; query: string } | null = null
+  for (const q of queriesSorted) {
     setNativeInputValue(input, q)
     dispatchInputEvents(input)
-    await sleep(480)
+    await sleep(waitAfterFilterMs(q, q.length === longestLen))
     const lb = doc.getElementById(reactSelectListboxId(input.id))
     if (!lb) continue
-    const pick = bestListboxOption(lb, desired)
-    if (pick) {
-      pick.el.click()
-      await sleep(150)
-      return {
-        fieldId,
-        status: 'filled',
-        reason: `Greenhouse ${label} (react-select): ${pick.label}`,
-      }
+    const row = scanListboxForBest(lb, desired)
+    if (!row) continue
+    if (
+      !best ||
+      row.score > best.score ||
+      (row.score === best.score && q.length > best.query.length)
+    ) {
+      best = { score: row.score, chosenLabel: row.label, query: q }
+    }
+    const exact =
+      row.label.trim().toLowerCase() === desired.toLowerCase() || row.score >= 99
+    if (exact) break
+  }
+
+  if (!best || best.score < 30) {
+    return {
+      fieldId,
+      status: 'skipped',
+      reason: `no matching react-select option for "${desired.slice(0, 60)}" (${label})`,
     }
   }
 
+  setNativeInputValue(input, best.query)
+  dispatchInputEvents(input)
+  await sleep(waitAfterFilterMs(best.query, best.query.length === longestLen))
+  const lbFinal = doc.getElementById(reactSelectListboxId(input.id))
+  if (!lbFinal) {
+    return {
+      fieldId,
+      status: 'error',
+      reason: `react-select menu missing for ${label} after filter`,
+    }
+  }
+
+  let toClick: HTMLElement | null = null
+  for (const opt of Array.from(lbFinal.querySelectorAll<HTMLElement>('[role="option"]'))) {
+    const lab = (opt.textContent ?? '').trim()
+    if (lab === best.chosenLabel) {
+      toClick = opt
+      break
+    }
+  }
+  if (!toClick) {
+    const again = scanListboxForBest(lbFinal, desired)
+    if (again && again.score >= 30) toClick = again.el
+  }
+  if (!toClick) {
+    return {
+      fieldId,
+      status: 'error',
+      reason: `could not re-select "${best.chosenLabel}" for ${label}`,
+    }
+  }
+
+  toClick.click()
+  await sleep(150)
   return {
     fieldId,
-    status: 'skipped',
-    reason: `no matching react-select option for "${desired.slice(0, 60)}" (${label})`,
+    status: 'filled',
+    reason: `Greenhouse ${label} (react-select): ${best.chosenLabel}`,
   }
 }
 
