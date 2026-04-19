@@ -51,7 +51,7 @@ function assignComboboxFilterValue(input: HTMLInputElement, text: string): void 
 async function typeComboboxValueSlowly(input: HTMLInputElement, text: string): Promise<void> {
   setNativeInputValue(input, '')
   assignComboboxFilterValue(input, '')
-  await sleep(40)
+  await sleep(22)
   let acc = ''
   for (const ch of text) {
     acc += ch
@@ -68,7 +68,7 @@ async function typeComboboxValueSlowly(input: HTMLInputElement, text: string): P
     } catch {
       input.dispatchEvent(new Event('input', { bubbles: true }))
     }
-    await sleep(10)
+    await sleep(4)
   }
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
@@ -251,7 +251,7 @@ async function pollReactSelectMatch(
     if (!lb) {
       input.focus()
       input.click()
-      await sleep(100)
+      await sleep(55)
       continue
     }
     for (const opt of Array.from(lb.querySelectorAll<HTMLElement>('[role="option"]'))) {
@@ -270,7 +270,7 @@ async function pollReactSelectMatch(
         return { chosenLabel: row.label, score: row.score }
       }
     }
-    await sleep(90)
+    await sleep(42)
   }
   return bestWeak && bestWeak.score >= 88 ? bestWeak : null
 }
@@ -323,22 +323,22 @@ async function fillReactSelectCombobox(
 
   input.focus()
   input.click()
-  await sleep(120)
+  await sleep(70)
   if (looksLikePastedProfileJson(input.value)) {
     assignComboboxFilterValue(input, '')
-    await sleep(80)
+    await sleep(45)
   }
 
   assignComboboxFilterValue(input, primary)
 
-  let match = await pollReactSelectMatch(doc, input, desired, 4500)
+  let match = await pollReactSelectMatch(doc, input, desired, 1000)
   const strongEnough = (m: { chosenLabel: string; score: number } | null) =>
     m !== null &&
     (m.score >= 97 || normListLabel(m.chosenLabel) === normListLabel(desired))
 
   if (!strongEnough(match)) {
     await typeComboboxValueSlowly(input, primary)
-    match = await pollReactSelectMatch(doc, input, desired, 5000)
+    match = await pollReactSelectMatch(doc, input, desired, 1000)
   }
 
   if (!match || match.score < 30) {
@@ -350,10 +350,10 @@ async function fillReactSelectCombobox(
   }
 
   assignComboboxFilterValue(input, primary)
-  await sleep(320)
+  await sleep(140)
   let toClick = findListboxOptionByNormLabel(doc, input.id, match.chosenLabel)
   if (!toClick) {
-    await sleep(400)
+    await sleep(100)
     toClick = findListboxOptionByNormLabel(doc, input.id, match.chosenLabel)
   }
   if (!toClick) {
@@ -370,7 +370,7 @@ async function fillReactSelectCombobox(
   }
 
   toClick.click()
-  await sleep(150)
+  await sleep(85)
   return {
     fieldId,
     status: 'filled',
