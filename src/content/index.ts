@@ -42,14 +42,17 @@ chrome.runtime.onMessage.addListener(
             dryRun: message.dryRun,
             targets: message.targets.length,
           })
+          const ghEducationPass =
+            isGreenhouseJobBoardHost(location.hostname) && message.profile.education.length > 0
           let results = runFillOperation(document, {
             profile: message.profile,
             settings: message.settings,
             dryRun: message.dryRun,
             includeLowerConfidence: message.includeLowerConfidence,
             targets: message.targets,
+            greenhouseEducationPassWillHandleSelects: ghEducationPass,
           })
-          if (isGreenhouseJobBoardHost(location.hostname) && message.profile.education.length > 0) {
+          if (ghEducationPass) {
             const gh = await runGreenhouseEducationFill({
               doc: document,
               profile: message.profile,

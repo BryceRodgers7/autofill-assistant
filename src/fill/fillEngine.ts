@@ -6,6 +6,7 @@ import type { ScannedField, FieldDescriptor, FieldFillResult } from '../shared/t
 import { resolveProfileString } from '../shared/profileValue'
 import { detectFields } from '../fieldDetection/detectFields'
 import { fingerprintForDescriptor } from '../shared/fingerprint'
+import { isGreenhouseStructuredEducationDescriptor } from './greenhouseEducation'
 
 function dispatchInputEvents(el: HTMLElement): void {
   el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -28,6 +29,11 @@ export interface FillEngineOptions {
   dryRun: boolean
   includeLowerConfidence: boolean
   targets: ScannedField[]
+  /**
+   * When true, skip generic `education` (JSON) on Greenhouse row `<select>`s;
+   * `runGreenhouseEducationFill` handles those from `profile.education[]`.
+   */
+  greenhouseEducationPassWillHandleSelects?: boolean
 }
 
 /**
@@ -140,6 +146,19 @@ export function runFillOperation(
         fieldId: d.id,
         status: 'skipped',
         reason: `below ${mode} threshold (${conf.toFixed(2)} < ${thr.toFixed(2)}; bar=${opts.settings.confidenceThreshold.toFixed(2)})`,
+      })
+      continue
+    }
+
+    if (
+      opts.greenhouseEducationPassWillHandleSelects &&
+      key === 'education' &&
+      isGreenhouseStructuredEducationDescriptor(d)
+    ) {
+      results.push({
+        fieldId: d.id,
+        status: 'skipped',
+        reason: 'Greenhouse education row (handled by structured fill pass)',
       })
       continue
     }

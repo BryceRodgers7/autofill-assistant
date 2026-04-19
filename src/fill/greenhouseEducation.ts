@@ -1,6 +1,6 @@
 import type { UserProfile } from '../storage/schema'
 import type { AppSettings } from '../storage/schema'
-import type { FieldFillResult } from '../shared/types'
+import type { FieldDescriptor, FieldFillResult } from '../shared/types'
 
 function dispatchSelectChange(sel: HTMLSelectElement): void {
   sel.dispatchEvent(new Event('input', { bubbles: true }))
@@ -31,17 +31,26 @@ function findLinkedInHeading(doc: Document): Element | null {
 }
 
 /**
- * Selects used for structured education rows (API-style names on embedded boards).
+ * Greenhouse structured education row controls (API-style `name` / `id` on job boards).
  * Excludes month-only parts when year selects exist separately.
  */
-function isStructuredEducationSelect(sel: HTMLSelectElement): boolean {
-  const key = `${sel.name} ${sel.id}`.toLowerCase()
+export function isGreenhouseStructuredEducationSelectKey(name: string, id: string): boolean {
+  const key = `${name} ${id}`.toLowerCase()
   if (/school_name_id|degree_id|discipline_id/.test(key)) return true
   if (/start_date|end_date/.test(key)) {
     if (/month/.test(key)) return false
     return true
   }
   return false
+}
+
+/** True for `<select>` rows filled by `runGreenhouseEducationFill` (not the generic `education` JSON string). */
+export function isGreenhouseStructuredEducationDescriptor(d: FieldDescriptor): boolean {
+  return d.controlKind === 'select' && isGreenhouseStructuredEducationSelectKey(d.name, d.idAttr)
+}
+
+function isStructuredEducationSelect(sel: HTMLSelectElement): boolean {
+  return isGreenhouseStructuredEducationSelectKey(sel.name, sel.id)
 }
 
 function selectsInEducationRegion(doc: Document): HTMLSelectElement[] {
