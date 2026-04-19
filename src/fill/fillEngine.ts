@@ -6,7 +6,10 @@ import type { ScannedField, FieldDescriptor, FieldFillResult } from '../shared/t
 import { resolveProfileString } from '../shared/profileValue'
 import { detectFields } from '../fieldDetection/detectFields'
 import { fingerprintForDescriptor } from '../shared/fingerprint'
-import { isGreenhouseStructuredEducationDescriptor } from './greenhouseEducation'
+import {
+  isGreenhouseReactBoardEducationDescriptor,
+  isGreenhouseStructuredEducationDescriptor,
+} from './greenhouseEducation'
 
 function dispatchInputEvents(el: HTMLElement): void {
   el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -153,7 +156,7 @@ export function runFillOperation(
     if (
       opts.greenhouseEducationPassWillHandleSelects &&
       key === 'education' &&
-      isGreenhouseStructuredEducationDescriptor(d)
+      (isGreenhouseStructuredEducationDescriptor(d) || isGreenhouseReactBoardEducationDescriptor(d))
     ) {
       results.push({
         fieldId: d.id,

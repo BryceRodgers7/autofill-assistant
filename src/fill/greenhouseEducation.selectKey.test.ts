@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isGreenhouseReactBoardEducationDescriptor,
   isGreenhouseStructuredEducationDescriptor,
   isGreenhouseStructuredEducationSelectKey,
 } from './greenhouseEducation'
@@ -65,5 +66,51 @@ describe('isGreenhouseStructuredEducationDescriptor', () => {
     expect(isGreenhouseStructuredEducationDescriptor(selectDesc('candidate[education][][school_name_id]', ''))).toBe(
       true,
     )
+  })
+})
+
+function inputDesc(idAttr: string, controlKind: FieldDescriptor['controlKind']): FieldDescriptor {
+  return {
+    id: 'x',
+    fingerprint: 'x',
+    controlKind,
+    tagName: 'INPUT',
+    name: '',
+    idAttr,
+    placeholder: '',
+    value: '',
+    required: false,
+    readOnly: false,
+    disabled: false,
+    autocomplete: '',
+    labelText: '',
+    ariaLabel: '',
+    ariaLabelledByText: '',
+    sectionContext: '',
+    nearbyText: '',
+    options: [],
+    likelyConsent: false,
+    likelyJunk: false,
+    isFile: false,
+    domPathHint: '',
+    inputType: controlKind === 'number' ? 'number' : 'text',
+  }
+}
+
+describe('isGreenhouseReactBoardEducationDescriptor', () => {
+  it('matches react-select school/degree/discipline ids', () => {
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('school--0', 'text'))).toBe(true)
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('degree--2', 'text'))).toBe(true)
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('discipline--1', 'text'))).toBe(true)
+  })
+
+  it('matches year spinbutton ids', () => {
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('start-year--0', 'number'))).toBe(true)
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('end-year--0', 'number'))).toBe(true)
+  })
+
+  it('does not match label ids or unrelated fields', () => {
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('school--0-label', 'text'))).toBe(false)
+    expect(isGreenhouseReactBoardEducationDescriptor(inputDesc('country', 'text'))).toBe(false)
   })
 })
